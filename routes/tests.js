@@ -8,5 +8,6 @@ router.get('/', verifyToken, controller.getAllTests);
 router.get('/:id', verifyToken, controller.getTestById);
 
 router.post('/', [verifyToken, isAdmin], controller.createTest);
+router.delete('/:id', [verifyToken, isAdmin], controller.deleteTest);
 
 module.exports = router;

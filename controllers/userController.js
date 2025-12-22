@@ -85,3 +85,21 @@ exports.getUserAccess = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+exports.deleteUser = async (req, res) => {
+    try {
+        const userToDelete = await User.findByPk(req.params.id);
+        if (!userToDelete) return res.status(404).json({ message: 'User not found' });
+
+        if (req.user.role === 'teacher') {
+            if (userToDelete.role !== 'student') {
+                return res.status(403).json({ message: 'Teachers can only delete students' });
+            }
+        }
+
+        await userToDelete.destroy();
+        res.status(200).json({ message: 'User deleted' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

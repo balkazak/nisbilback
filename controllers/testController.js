@@ -89,3 +89,13 @@ exports.getAllTests = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+exports.deleteTest = async (req, res) => {
+    try {
+        const deleted = await Test.destroy({ where: { id: req.params.id } });
+        if (!deleted) return res.status(404).json({ message: 'Test not found' });
+        res.status(200).json({ message: 'Test deleted' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
