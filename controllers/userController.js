@@ -91,10 +91,8 @@ exports.deleteUser = async (req, res) => {
         const userToDelete = await User.findByPk(req.params.id);
         if (!userToDelete) return res.status(404).json({ message: 'User not found' });
 
-        if (req.user.role === 'teacher') {
-            if (userToDelete.role !== 'student') {
-                return res.status(403).json({ message: 'Teachers can only delete students' });
-            }
+        if (userToDelete.username === 'admin') {
+            return res.status(403).json({ message: 'Главного администратора нельзя удалить' });
         }
 
         await userToDelete.destroy();

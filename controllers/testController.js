@@ -99,3 +99,33 @@ exports.deleteTest = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+exports.updateTest = async (req, res) => {
+    try {
+        const { title, description, time_limit, is_standalone, lessonId, questions } = req.body;
+
+        const test = await Test.findByPk(req.params.id);
+        if (!test) return res.status(404).json({ message: 'Test not found' });
+
+        // Update test metadata
+        await test.update({
+            title,
+            description,
+            time_limit,
+            is_standalone,
+            lessonId
+        });
+
+        // Update questions: delete old ones and create new ones
+        if (questions && questions.length > 0) {
+            await Question.destroy({ where: { TestId: test.id } });
+            const questionData = questions.map(q => ({ ...q, TestId: test.id }));
+            await Question.bulkCreate(questionData);
+        }
+
+        const updatedTest = await Test.findByPk(test.id, { include: [Question] });
+        res.status(200).json(updatedTest);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

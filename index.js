@@ -23,7 +23,7 @@ app.use((req, res, next) => {
 
 // Routes Placeholder
 app.get('/', (req, res) => {
-    res.send('Educational Platform API Running');
+    res.send('Educational Platform API - VERSION 2.1 (NEW ROUTES)');
 });
 
 const authRoutes = require('./routes/auth');
@@ -31,6 +31,7 @@ const userRoutes = require('./routes/users');
 const courseRoutes = require('./routes/courses');
 const testRoutes = require('./routes/tests');
 const resultRoutes = require('./routes/results');
+const lessonRoutes = require('./routes/lessons');
 const { User } = require('./models');
 const bcrypt = require('bcryptjs');
 
@@ -40,10 +41,12 @@ app.use('/api/users', userRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/results', resultRoutes);
+app.use('/api/lessons', lessonRoutes);
 app.use('/api/upload', uploadRoutes);
+console.log('Routes mounted: /api/lessons');
 
 // Sync Database and Start Server
-sequelize.sync({ alter: true }).then(async () => {
+sequelize.sync().then(async () => {
     console.log('Database synced');
 
     // Seed Admin

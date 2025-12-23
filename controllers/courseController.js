@@ -89,6 +89,17 @@ exports.deleteCourse = async (req, res) => {
     }
 };
 
+exports.updateCourse = async (req, res) => {
+    try {
+        const { title, description, thumbnail_url } = req.body;
+        const [updated] = await Course.update({ title, description, thumbnail_url }, { where: { id: req.params.id } });
+        if (!updated) return res.status(404).json({ message: 'Course not found' });
+        res.status(200).json({ message: 'Course updated' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // --- Lessons ---
 
 // --- Lessons ---
@@ -116,6 +127,20 @@ exports.deleteLesson = async (req, res) => {
         const deleted = await Lesson.destroy({ where: { id: req.params.id } });
         if (!deleted) return res.status(404).json({ message: 'Lesson not found' });
         res.status(200).json({ message: 'Lesson deleted' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.updateLesson = async (req, res) => {
+    try {
+        const { title, video_urls, solution_video_urls, order } = req.body;
+        const [updated] = await Lesson.update(
+            { title, video_urls, solution_video_urls, order },
+            { where: { id: req.params.id } }
+        );
+        if (!updated) return res.status(404).json({ message: 'Lesson not found' });
+        res.status(200).json({ message: 'Lesson updated' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

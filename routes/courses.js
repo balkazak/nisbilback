@@ -10,10 +10,10 @@ router.get('/:id', verifyToken, controller.getCourseById);
 
 // Admin only write
 router.post('/', [verifyToken, isAdmin], controller.createCourse);
+router.put('/:id', [verifyToken, isAdmin], controller.updateCourse);
 router.delete('/:id', [verifyToken, isAdmin], controller.deleteCourse);
 
 // Lessons
 router.post('/:courseId/lessons', [verifyToken, isAdmin], controller.addLesson);
-router.delete('/lessons/:id', [verifyToken, isAdmin], controller.deleteLesson);
 
 module.exports = router;
