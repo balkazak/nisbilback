@@ -43,12 +43,56 @@ const Result = sequelize.define('Result', {
     completed_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 });
 
-const UserAccess = sequelize.define('UserAccess', {
-    // Joint table for assigning courses to students
+const UserCourses = sequelize.define('UserCourses', {
+    UserId: {
+        type: DataTypes.INTEGER,
+        references: { model: 'Users', key: 'id' },
+        allowNull: false,
+        unique: false
+    },
+    CourseId: {
+        type: DataTypes.INTEGER,
+        references: { model: 'Courses', key: 'id' },
+        allowNull: false,
+        unique: false
+    }
+}, {
+    indexes: [
+        {
+            unique: false,
+            fields: ['UserId']
+        },
+        {
+            unique: false,
+            fields: ['CourseId']
+        }
+    ]
 });
 
-const UserTestAccess = sequelize.define('UserTestAccess', {
-    // Joint table for assigning tests to students
+const UserTests = sequelize.define('UserTests', {
+    UserId: {
+        type: DataTypes.INTEGER,
+        references: { model: 'Users', key: 'id' },
+        allowNull: false,
+        unique: false
+    },
+    TestId: {
+        type: DataTypes.INTEGER,
+        references: { model: 'Tests', key: 'id' },
+        allowNull: false,
+        unique: false
+    }
+}, {
+    indexes: [
+        {
+            unique: false,
+            fields: ['UserId']
+        },
+        {
+            unique: false,
+            fields: ['TestId']
+        }
+    ]
 });
 
 // Relationships
@@ -64,12 +108,12 @@ Test.hasMany(Question, { onDelete: 'CASCADE' });
 Question.belongsTo(Test);
 
 // User Access (Courses)
-User.belongsToMany(Course, { through: UserAccess });
-Course.belongsToMany(User, { through: UserAccess });
+User.belongsToMany(Course, { through: UserCourses });
+Course.belongsToMany(User, { through: UserCourses });
 
 // User Access (Tests)
-User.belongsToMany(Test, { through: UserTestAccess });
-Test.belongsToMany(User, { through: UserTestAccess });
+User.belongsToMany(Test, { through: UserTests });
+Test.belongsToMany(User, { through: UserTests });
 
 // Results
 User.hasMany(Result);
@@ -85,6 +129,6 @@ module.exports = {
     Test,
     Question,
     Result,
-    UserAccess,
-    UserTestAccess
+    UserCourses,
+    UserTests
 };

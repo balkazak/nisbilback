@@ -46,6 +46,7 @@ app.use('/api/upload', uploadRoutes);
 console.log('Routes mounted: /api/lessons');
 
 // Sync Database and Start Server
+// Sync Database and Start Server
 sequelize.sync().then(async () => {
     console.log('Database synced');
 
@@ -60,6 +61,25 @@ sequelize.sync().then(async () => {
             role: 'admin'
         });
         console.log('Default admin created: admin / admin123');
+    }
+
+    // Auto-Migration for Schema Fix (UserAccess -> UserCourses)
+    try {
+        const checkOld = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table' AND name='UserAccess';", { type: sequelize.QueryTypes.SELECT });
+        if (checkOld.length > 0) {
+            console.log('Found legacy UserAccess table. Migrating data to UserCourses...');
+            await sequelize.query('INSERT OR IGNORE INTO UserCourses (UserId, CourseId, createdAt, updatedAt) SELECT UserId, CourseId, createdAt, updatedAt FROM UserAccess');
+            console.log('Migration to UserCourses complete.');
+        }
+
+        const checkOldTests = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table' AND name='UserTestAccess';", { type: sequelize.QueryTypes.SELECT });
+        if (checkOldTests.length > 0) {
+            console.log('Found legacy UserTestAccess table. Migrating data to UserTests...');
+            await sequelize.query('INSERT OR IGNORE INTO UserTests (UserId, TestId, createdAt, updatedAt) SELECT UserId, TestId, createdAt, updatedAt FROM UserTestAccess');
+            console.log('Migration to UserTests complete.');
+        }
+    } catch (migErr) {
+        console.error('Migration warning (non-critical):', migErr.message);
     }
 
     app.listen(PORT, () => {

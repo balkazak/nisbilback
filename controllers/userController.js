@@ -57,15 +57,30 @@ exports.updateUserAccess = async (req, res) => {
         const user = await User.findByPk(userId);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        if (courseIds) {
-            await user.setCourses(courseIds);
+        if (courseIds && Array.isArray(courseIds)) {
+            const uniqueCourseIds = [...new Set(courseIds)];
+            const courses = await Course.findAll({ where: { id: uniqueCourseIds } });
+            await user.setCourses(courses);
         }
-        if (testIds) {
-            await user.setTests(testIds);
+        if (testIds && Array.isArray(testIds)) {
+            const uniqueTestIds = [...new Set(testIds)];
+            const tests = await Test.findAll({ where: { id: uniqueTestIds } });
+            await user.setTests(tests);
         }
 
         res.status(200).json({ message: 'Access updated successfully' });
     } catch (error) {
+        if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(400).json({
+                message: 'Validation error',
+                errors: error.errors.map(e => ({
+                    message: e.message,
+                    type: e.type,
+                    path: e.path,
+                    value: e.value
+                }))
+            });
+        }
         res.status(500).json({ message: error.message });
     }
 };
@@ -101,3 +116,5 @@ exports.deleteUser = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+

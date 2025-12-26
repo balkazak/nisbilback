@@ -12,6 +12,24 @@ dist
 dist-ssr
 *.local
 
+# Environment
+.env
+.env.*
+
+# Database
+database.sqlite
+*.sqlite
+*.db
+
+# Uploads (keep directory but ignore files)
+uploads/*
+!uploads/.gitkeep
+
+# Temporary/Test scripts
+reproduce_issue.js
+reproduce_issue_local.js
+fix_db_schema.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
