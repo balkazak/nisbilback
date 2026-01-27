@@ -4,8 +4,11 @@ const { verifyToken, isAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+router.get('/trial', controller.getTrialTest);
+
 router.get('/', verifyToken, controller.getAllTests);
 router.get('/:id', verifyToken, controller.getTestById);
+router.post('/buy', verifyToken, controller.buyTest);
 
 router.post('/', [verifyToken, isAdmin], controller.createTest);
 router.put('/:id', [verifyToken, isAdmin], controller.updateTest);

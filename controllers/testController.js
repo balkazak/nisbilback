@@ -3,14 +3,21 @@ const { Test, Question, Lesson, User, Course } = require('../models');
 exports.createTest = async (req, res) => {
     try {
         // lessonId is optional. If present, attaches to lesson. If null, standalone.
-        const { title, description, time_limit, is_standalone, lessonId, questions } = req.body;
+        const { title, description, time_limit, is_standalone, lessonId, questions, category, is_trial, coin_price } = req.body;
+
+        if (is_trial) {
+            await Test.update({ is_trial: false }, { where: { is_trial: true } });
+        }
 
         const test = await Test.create({
             title,
             description,
             time_limit,
             is_standalone,
-            lessonId // Can be null
+            lessonId, // Can be null
+            category,
+            is_trial: !!is_trial,
+            coin_price: coin_price || 0
         });
 
         if (questions && questions.length > 0) {
@@ -73,11 +80,12 @@ exports.getAllTests = async (req, res) => {
 
             const accessibleTests = tests.filter(test => {
                 if (test.is_standalone) {
-                    return assignedTestIds.includes(test.id);
+                    test.setDataValue('isOwned', assignedTestIds.includes(test.id));
+                    // Return all standalone tests so student can see what to buy
+                    return true;
                 } else if (test.Lesson && test.Lesson.CourseId) {
                     return assignedCourseIds.includes(test.Lesson.CourseId);
                 }
-                // If test is not standalone and has no lesson (orphan), default hiding or admin only. 
                 return false;
             });
 
@@ -102,7 +110,11 @@ exports.deleteTest = async (req, res) => {
 
 exports.updateTest = async (req, res) => {
     try {
-        const { title, description, time_limit, is_standalone, lessonId, questions } = req.body;
+        const { title, description, time_limit, is_standalone, lessonId, questions, category, is_trial, coin_price } = req.body;
+
+        if (is_trial) {
+            await Test.update({ is_trial: false }, { where: { is_trial: true } });
+        }
 
         const test = await Test.findByPk(req.params.id);
         if (!test) return res.status(404).json({ message: 'Test not found' });
@@ -113,7 +125,10 @@ exports.updateTest = async (req, res) => {
             description,
             time_limit,
             is_standalone,
-            lessonId
+            lessonId,
+            category,
+            is_trial: is_trial !== undefined ? !!is_trial : test.is_trial,
+            coin_price: coin_price !== undefined ? coin_price : test.coin_price
         });
 
         // Update questions: delete old ones and create new ones
@@ -125,6 +140,55 @@ exports.updateTest = async (req, res) => {
 
         const updatedTest = await Test.findByPk(test.id, { include: [Question] });
         res.status(200).json(updatedTest);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.getTrialTest = async (req, res) => {
+    try {
+        const test = await Test.findOne({
+            where: { is_trial: true },
+            include: [Question]
+        });
+        if (!test) return res.status(404).json({ message: 'Trial test not found' });
+
+        // Sanitize for guest/student: remove correct_option_index
+        const plainTest = test.toJSON();
+        if (plainTest.Questions) {
+            plainTest.Questions.forEach(q => delete q.correct_option_index);
+        }
+
+        res.status(200).json(plainTest);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.buyTest = async (req, res) => {
+    try {
+        const { testId } = req.body;
+        const userId = req.user.id;
+
+        const test = await Test.findByPk(testId);
+        if (!test) return res.status(404).json({ message: 'Test not found' });
+        if (!test.is_standalone) return res.status(400).json({ message: 'Only standalone tests can be purchased' });
+
+        const user = await User.findByPk(userId, { include: [Test] });
+        if (user.Tests.find(t => t.id === parseInt(testId))) {
+            return res.status(400).json({ message: 'Test already owned' });
+        }
+
+        if (user.coins < test.coin_price) {
+            return res.status(400).json({ message: 'Not enough coins' });
+        }
+
+        // Deduct coins and add access
+        user.coins -= test.coin_price;
+        await user.save();
+        await user.addTest(test);
+
+        res.status(200).json({ message: 'Test purchased successfully', coins: user.coins });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

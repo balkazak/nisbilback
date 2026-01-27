@@ -27,6 +27,7 @@ exports.login = async (req, res) => {
             id: user.id,
             username: user.username,
             role: user.role,
+            coins: user.coins,
             accessToken: token
         });
     } catch (error) {
@@ -37,7 +38,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
     try {
         const user = await User.findByPk(req.user.id, {
-            attributes: ['id', 'username', 'role']
+            attributes: ['id', 'username', 'role', 'coins']
         });
         if (!user) return res.status(404).json({ message: 'User not found' });
         res.status(200).json(user);

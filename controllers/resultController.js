@@ -20,13 +20,25 @@ exports.submitResult = async (req, res) => {
         let score = 0;
         let max_score = 0;
 
+        const isBil = test.category === 'bil';
+
         test.Questions.forEach(q => {
-            max_score += q.score_value;
             const userAnswer = details[q.id];
-            // details is an object with keys as question IDs (strings or ints)
-            // ensure comparison works
-            if (userAnswer !== undefined && parseInt(userAnswer) === q.correct_option_index) {
-                score += q.score_value;
+            
+            if (isBil) {
+                max_score += 4;
+                if (userAnswer !== undefined && userAnswer !== null && userAnswer !== '') {
+                    if (parseInt(userAnswer) === q.correct_option_index) {
+                        score += 4;
+                    } else {
+                        score -= 1;
+                    }
+                }
+            } else {
+                max_score += q.score_value;
+                if (userAnswer !== undefined && parseInt(userAnswer) === q.correct_option_index) {
+                    score += q.score_value;
+                }
             }
         });
 
@@ -42,7 +54,26 @@ exports.submitResult = async (req, res) => {
 
         console.log('Result created:', result.id);
 
-        res.status(201).json(result);
+        let earnedCoins = 0;
+        let totalCoins = 0;
+        if (!test.is_standalone && !test.is_trial) {
+            const user = await User.findByPk(req.user.id);
+            if (user) {
+                earnedCoins = 10;
+                user.coins += earnedCoins;
+                await user.save();
+                totalCoins = user.coins;
+            }
+        } else if (test.is_standalone) {
+             const user = await User.findByPk(req.user.id);
+             totalCoins = user ? user.coins : 0;
+        }
+
+        res.status(201).json({
+            ...result.toJSON(),
+            earnedCoins,
+            totalCoins
+        });
     } catch (error) {
         console.error('Error submitting result:', error);
         res.status(500).json({ message: error.message });
@@ -54,7 +85,7 @@ exports.getMyResults = async (req, res) => {
         console.log('Fetching results for user:', req.user.id);
         const results = await Result.findAll({
             where: { UserId: req.user.id },
-            include: [{ model: Test, attributes: ['title'] }]
+            include: [{ model: Test, attributes: ['title', 'category'] }]
         });
         console.log(`Found ${results.length} results`);
         res.status(200).json(results);
@@ -69,7 +100,7 @@ exports.getAllResults = async (req, res) => {
         console.log('Fetching all results');
         const results = await Result.findAll({
             include: [
-                { model: Test, attributes: ['title'] },
+                { model: Test, attributes: ['title', 'category'] },
                 { model: User, attributes: ['username', 'id'] }
             ]
         });

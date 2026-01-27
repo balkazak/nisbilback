@@ -6,8 +6,8 @@ const router = express.Router();
 
 router.post('/', [verifyToken, isTeacherOrAdmin], controller.createUser);
 router.get('/', [verifyToken, isTeacherOrAdmin], controller.getAllUsers);
-router.post('/:userId/access', [verifyToken, isTeacherOrAdmin], controller.updateUserAccess);
-router.get('/:id/access', [verifyToken, isTeacherOrAdmin], controller.getUserAccess);
-router.delete('/:id', [verifyToken, isTeacherOrAdmin], controller.deleteUser);
+router.post('/:userId/access', [verifyToken, isAdmin], controller.updateUserAccess);
+router.get('/:id/access', [verifyToken, isAdmin], controller.getUserAccess);
+router.delete('/:id', [verifyToken, isAdmin], controller.deleteUser);
 
 module.exports = router;

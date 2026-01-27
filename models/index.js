@@ -5,7 +5,8 @@ const User = sequelize.define('User', {
     username: { type: DataTypes.STRING, unique: true, allowNull: false },
     password: { type: DataTypes.STRING, allowNull: false },
     role: { type: DataTypes.ENUM('admin', 'teacher', 'student'), allowNull: false },
-    created_by: { type: DataTypes.INTEGER, allowNull: true } // ID of admin or teacher who created this user
+    created_by: { type: DataTypes.INTEGER, allowNull: true }, // ID of admin or teacher who created this user
+    coins: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
 const Course = sequelize.define('Course', {
@@ -25,7 +26,10 @@ const Test = sequelize.define('Test', {
     title: { type: DataTypes.STRING, allowNull: false },
     description: { type: DataTypes.TEXT },
     time_limit: { type: DataTypes.INTEGER, allowNull: true }, // In minutes, null for no limit
-    is_standalone: { type: DataTypes.BOOLEAN, defaultValue: false } // True if not attached to a specific video
+    is_standalone: { type: DataTypes.BOOLEAN, defaultValue: false }, // True if not attached to a specific video
+    category: { type: DataTypes.ENUM('standard', 'bil'), defaultValue: 'standard' },
+    is_trial: { type: DataTypes.BOOLEAN, defaultValue: false },
+    coin_price: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
 const Question = sequelize.define('Question', {
