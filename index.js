@@ -49,6 +49,22 @@ console.log('Routes mounted: /api/lessons');
 // Sync Database and Start Server
 sequelize.sync().then(async () => {
     console.log('Database synced');
+    
+    // Auto-Migration for missing columns (Users table)
+    try {
+        const columns = await sequelize.query("PRAGMA table_info(Users);", { type: sequelize.QueryTypes.SELECT });
+        const hasCoins = columns.some(c => c.name === 'coins');
+        if (!hasCoins) {
+            console.log('Adding missing coins column to Users table...');
+            await sequelize.query('ALTER TABLE Users ADD COLUMN coins INTEGER DEFAULT 0;');
+            console.log('Coins column added.');
+        }
+
+        // Cleanup any lingering backup tables from failed sync({alter: true})
+        await sequelize.query("DROP TABLE IF EXISTS Users_backup;");
+    } catch (err) {
+        console.error('Migration error (Users):', err.message);
+    }
 
     // Seed Admin
     const adminExists = await User.findOne({ where: { role: 'admin' } });
@@ -62,6 +78,7 @@ sequelize.sync().then(async () => {
         });
         console.log('Default admin created: admin / admin123');
     }
+
 
     // Auto-Migration for Schema Fix (UserAccess -> UserCourses)
     try {
