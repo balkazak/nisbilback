@@ -16,10 +16,7 @@ dist-ssr
 .env
 .env.*
 
-# Database
-database.sqlite
-*.sqlite
-*.db
+
 
 # Uploads (keep directory but ignore files)
 uploads/*
