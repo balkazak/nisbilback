@@ -44,6 +44,11 @@ exports.submitResult = async (req, res) => {
 
         console.log(`Calculated score: ${score}/${max_score}`);
 
+        // Check if user has already passed this test BEFORE creating the new result
+        const existingResult = await Result.findOne({
+            where: { UserId: req.user.id, TestId: testId }
+        });
+
         const result = await Result.create({
             score,
             max_score,
@@ -56,15 +61,28 @@ exports.submitResult = async (req, res) => {
 
         let earnedCoins = 0;
         let totalCoins = 0;
-        if (!test.is_standalone && !test.is_trial) {
+        
+        // Only award coins if this is the FIRST time taking the test or no previous result existed
+        if (!test.is_standalone && !test.is_trial && !existingResult) {
             const user = await User.findByPk(req.user.id);
             if (user) {
-                earnedCoins = 10;
+                // Determine max reward (10 coins)
+                const MAX_REWARD = 10;
+                // Calculate percentage (0 to 1)
+                const percentage = max_score > 0 ? (score / max_score) : 0;
+                
+                // Calculate earned coins: ensure at least 0, round to nearest integer
+                earnedCoins = Math.max(0, Math.round(percentage * MAX_REWARD));
+                
                 user.coins += earnedCoins;
                 await user.save();
                 totalCoins = user.coins;
             }
         } else if (test.is_standalone) {
+             const user = await User.findByPk(req.user.id);
+             totalCoins = user ? user.coins : 0;
+        } else {
+             // If not earning coins (retake or trial), just return current coins
              const user = await User.findByPk(req.user.id);
              totalCoins = user ? user.coins : 0;
         }

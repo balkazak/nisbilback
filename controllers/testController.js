@@ -36,7 +36,7 @@ exports.getTestById = async (req, res) => {
         const test = await Test.findByPk(req.params.id, {
             include: [Question]
         });
-        if (!test) return res.status(404).json({ message: 'Test not found' });
+        if (!test) return res.status(404).json({ message: 'Тест не найден' });
 
         // If student, maybe hide correct answers? 
         // For simplicity, we send them now but frontend should handle logic or we sanitize here.
@@ -73,7 +73,7 @@ exports.getAllTests = async (req, res) => {
         // Filter for students: Only return tests they have access to
         if (req.user.role === 'student') {
             const user = await User.findByPk(req.user.id, { include: [Test, Course] });
-            if (!user) return res.status(404).json({ message: 'User not found' });
+            if (!user) return res.status(404).json({ message: 'Пользователь не найден' });
 
             const assignedTestIds = user.Tests.map(t => t.id);
             const assignedCourseIds = user.Courses.map(c => c.id);
@@ -101,8 +101,8 @@ exports.getAllTests = async (req, res) => {
 exports.deleteTest = async (req, res) => {
     try {
         const deleted = await Test.destroy({ where: { id: req.params.id } });
-        if (!deleted) return res.status(404).json({ message: 'Test not found' });
-        res.status(200).json({ message: 'Test deleted' });
+        if (!deleted) return res.status(404).json({ message: 'Тест не найден' });
+        res.status(200).json({ message: 'Тест удален' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -117,7 +117,7 @@ exports.updateTest = async (req, res) => {
         }
 
         const test = await Test.findByPk(req.params.id);
-        if (!test) return res.status(404).json({ message: 'Test not found' });
+        if (!test) return res.status(404).json({ message: 'Тест не найден' });
 
         // Update test metadata
         await test.update({
@@ -151,7 +151,7 @@ exports.getTrialTest = async (req, res) => {
             where: { is_trial: true },
             include: [Question]
         });
-        if (!test) return res.status(404).json({ message: 'Trial test not found' });
+        if (!test) return res.status(404).json({ message: 'Тест не найден' });
 
         // Sanitize for guest/student: remove correct_option_index
         const plainTest = test.toJSON();
@@ -171,16 +171,16 @@ exports.buyTest = async (req, res) => {
         const userId = req.user.id;
 
         const test = await Test.findByPk(testId);
-        if (!test) return res.status(404).json({ message: 'Test not found' });
-        if (!test.is_standalone) return res.status(400).json({ message: 'Only standalone tests can be purchased' });
+        if (!test) return res.status(404).json({ message: 'Тест не найден' });
+        if (!test.is_standalone) return res.status(400).json({ message: 'Только отдельные тесты можно приобрести' });
 
         const user = await User.findByPk(userId, { include: [Test] });
         if (user.Tests.find(t => t.id === parseInt(testId))) {
-            return res.status(400).json({ message: 'Test already owned' });
+            return res.status(400).json({ message: 'Тест уже приобретен' });
         }
 
         if (user.coins < test.coin_price) {
-            return res.status(400).json({ message: 'Not enough coins' });
+            return res.status(400).json({ message: 'Недостаточно монет' });
         }
 
         // Deduct coins and add access
@@ -188,7 +188,7 @@ exports.buyTest = async (req, res) => {
         await user.save();
         await user.addTest(test);
 
-        res.status(200).json({ message: 'Test purchased successfully', coins: user.coins });
+        res.status(200).json({ message: 'Тест успешно приобретен', coins: user.coins });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
