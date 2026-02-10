@@ -50,20 +50,29 @@ console.log('Routes mounted: /api/lessons');
 sequelize.sync().then(async () => {
     console.log('Database synced');
     
-    // Auto-Migration for missing columns (Users table)
-    try {
-        const columns = await sequelize.query("PRAGMA table_info(Users);", { type: sequelize.QueryTypes.SELECT });
-        const hasCoins = columns.some(c => c.name === 'coins');
-        if (!hasCoins) {
-            console.log('Adding missing coins column to Users table...');
-            await sequelize.query('ALTER TABLE Users ADD COLUMN coins INTEGER DEFAULT 0;');
-            console.log('Coins column added.');
-        }
+    // Auto-Migration for missing columns (Only for SQLite)
+    if (sequelize.getDialect() === 'sqlite') {
+        try {
+            const columns = await sequelize.query("PRAGMA table_info(Users);", { type: sequelize.QueryTypes.SELECT });
+            const hasCoins = columns.some(c => c.name === 'coins');
+            if (!hasCoins) {
+                console.log('Adding missing coins column to Users table...');
+                await sequelize.query('ALTER TABLE Users ADD COLUMN coins INTEGER DEFAULT 0;');
+                console.log('Coins column added.');
+            }
 
-        // Cleanup any lingering backup tables from failed sync({alter: true})
-        await sequelize.query("DROP TABLE IF EXISTS Users_backup;");
-    } catch (err) {
-        console.error('Migration error (Users):', err.message);
+            await sequelize.query("DROP TABLE IF EXISTS Users_backup;");
+
+            const lessonColumns = await sequelize.query("PRAGMA table_info(Lessons);", { type: sequelize.QueryTypes.SELECT });
+            const hasMaterials = lessonColumns.some(c => c.name === 'materials');
+            if (!hasMaterials) {
+                console.log('Adding missing materials column to Lessons table...');
+                await sequelize.query('ALTER TABLE Lessons ADD COLUMN materials JSON DEFAULT "[]";');
+                console.log('Materials column added.');
+            }
+        } catch (err) {
+            console.error('Migration error (Users/Lessons):', err.message);
+        }
     }
 
     // Seed Admin
@@ -80,23 +89,25 @@ sequelize.sync().then(async () => {
     }
 
 
-    // Auto-Migration for Schema Fix (UserAccess -> UserCourses)
-    try {
-        const checkOld = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table' AND name='UserAccess';", { type: sequelize.QueryTypes.SELECT });
-        if (checkOld.length > 0) {
-            console.log('Found legacy UserAccess table. Migrating data to UserCourses...');
-            await sequelize.query('INSERT OR IGNORE INTO UserCourses (UserId, CourseId, createdAt, updatedAt) SELECT UserId, CourseId, createdAt, updatedAt FROM UserAccess');
-            console.log('Migration to UserCourses complete.');
-        }
+    // Auto-Migration for Schema Fix (Only for SQLite)
+    if (sequelize.getDialect() === 'sqlite') {
+        try {
+            const checkOld = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table' AND name='UserAccess';", { type: sequelize.QueryTypes.SELECT });
+            if (checkOld.length > 0) {
+                console.log('Found legacy UserAccess table. Migrating data to UserCourses...');
+                await sequelize.query('INSERT OR IGNORE INTO UserCourses (UserId, CourseId, createdAt, updatedAt) SELECT UserId, CourseId, createdAt, updatedAt FROM UserAccess');
+                console.log('Migration to UserCourses complete.');
+            }
 
-        const checkOldTests = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table' AND name='UserTestAccess';", { type: sequelize.QueryTypes.SELECT });
-        if (checkOldTests.length > 0) {
-            console.log('Found legacy UserTestAccess table. Migrating data to UserTests...');
-            await sequelize.query('INSERT OR IGNORE INTO UserTests (UserId, TestId, createdAt, updatedAt) SELECT UserId, TestId, createdAt, updatedAt FROM UserTestAccess');
-            console.log('Migration to UserTests complete.');
+            const checkOldTests = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table' AND name='UserTestAccess';", { type: sequelize.QueryTypes.SELECT });
+            if (checkOldTests.length > 0) {
+                console.log('Found legacy UserTestAccess table. Migrating data to UserTests...');
+                await sequelize.query('INSERT OR IGNORE INTO UserTests (UserId, TestId, createdAt, updatedAt) SELECT UserId, TestId, createdAt, updatedAt FROM UserTestAccess');
+                console.log('Migration to UserTests complete.');
+            }
+        } catch (migErr) {
+            console.error('Migration warning (non-critical):', migErr.message);
         }
-    } catch (migErr) {
-        console.error('Migration warning (non-critical):', migErr.message);
     }
 
     app.listen(PORT, () => {
