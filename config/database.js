@@ -14,7 +14,7 @@ const sequelize = process.env.DATABASE_URL
     })
     : new Sequelize({
         dialect: 'sqlite',
-        storage: process.env.DATABASE_PATH || path.join(__dirname, '..', 'database.sqlite'),
+        storage: process.env.DATABASE_PATH || path.join(__dirname, '..', 'uploads', 'database.sqlite'),
         logging: false
     });
 
