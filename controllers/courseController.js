@@ -107,12 +107,13 @@ exports.updateCourse = async (req, res) => {
 exports.addLesson = async (req, res) => {
     try {
         const { courseId } = req.params;
-        const { title, video_urls, solution_video_urls, order } = req.body;
+        const { title, video_urls, solution_video_urls, materials, order } = req.body;
 
         const lesson = await Lesson.create({
             title,
             video_urls: video_urls || [],
             solution_video_urls: solution_video_urls || [],
+            materials: materials || [],
             order,
             CourseId: courseId
         });
@@ -134,9 +135,9 @@ exports.deleteLesson = async (req, res) => {
 
 exports.updateLesson = async (req, res) => {
     try {
-        const { title, video_urls, solution_video_urls, order } = req.body;
+        const { title, video_urls, solution_video_urls, materials, order } = req.body;
         const [updated] = await Lesson.update(
-            { title, video_urls, solution_video_urls, order },
+            { title, video_urls, solution_video_urls, materials, order },
             { where: { id: req.params.id } }
         );
         if (!updated) return res.status(404).json({ message: 'Lesson not found' });

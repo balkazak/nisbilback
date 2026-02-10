@@ -19,6 +19,7 @@ const Lesson = sequelize.define('Lesson', {
     title: { type: DataTypes.STRING, allowNull: false },
     video_urls: { type: DataTypes.JSON, defaultValue: [] }, // Array of YouTube links
     solution_video_urls: { type: DataTypes.JSON, defaultValue: [] }, // Array of solution links
+    materials: { type: DataTypes.JSON, defaultValue: [] }, // Array of { name, url } for PDF files
     order: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
