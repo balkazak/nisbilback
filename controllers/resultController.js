@@ -21,6 +21,7 @@ exports.submitResult = async (req, res) => {
         let max_score = 0;
 
         const isBil = test.category === 'bil';
+        const isNis = test.category === 'nis';
 
         test.Questions.forEach(q => {
             const userAnswer = details[q.id];
@@ -32,6 +33,15 @@ exports.submitResult = async (req, res) => {
                         score += 4;
                     } else {
                         score -= 1;
+                    }
+                }
+            } else if (isNis) {
+                const qType = q.question_type || 'standard';
+                const pointsForCorrect = qType === 'sandyk_sippattama' ? 5 : 10;
+                max_score += pointsForCorrect;
+                if (userAnswer !== undefined && userAnswer !== null && userAnswer !== '') {
+                    if (parseInt(userAnswer) === q.correct_option_index) {
+                        score += pointsForCorrect;
                     }
                 }
             } else {
@@ -79,21 +89,210 @@ exports.submitResult = async (req, res) => {
                 totalCoins = user.coins;
             }
         } else if (test.is_standalone) {
-             const user = await User.findByPk(req.user.id);
-             totalCoins = user ? user.coins : 0;
+            const user = await User.findByPk(req.user.id);
+            totalCoins = user ? user.coins : 0;
         } else {
-             // If not earning coins (retake or trial), just return current coins
-             const user = await User.findByPk(req.user.id);
-             totalCoins = user ? user.coins : 0;
+            const user = await User.findByPk(req.user.id);
+            totalCoins = user ? user.coins : 0;
         }
+
+        // Construct detailed question review for student
+        const questionsReview = (test.Questions || []).map((q, idx) => {
+            const rawAns = details ? details[q.id] : undefined;
+            const userAnswer = (rawAns !== undefined && rawAns !== null && rawAns !== '') ? parseInt(rawAns) : null;
+            const isCorrect = userAnswer !== null && userAnswer === q.correct_option_index;
+
+            let max_points = q.score_value || 1;
+            let points_awarded = 0;
+
+            if (isBil) {
+                max_points = 4;
+                if (userAnswer !== null) {
+                    points_awarded = isCorrect ? 4 : -1;
+                }
+            } else if (isNis) {
+                const qType = q.question_type || 'standard';
+                max_points = qType === 'sandyk_sippattama' ? 5 : 10;
+                if (userAnswer !== null && isCorrect) {
+                    points_awarded = max_points;
+                }
+            } else {
+                if (isCorrect) {
+                    points_awarded = max_points;
+                }
+            }
+
+            return {
+                id: q.id,
+                order: idx + 1,
+                text: q.text,
+                image_url: q.image_url,
+                options: q.options,
+                userAnswer: userAnswer,
+                correct_option_index: q.correct_option_index,
+                isCorrect: isCorrect,
+                max_points,
+                points_awarded,
+                score_value: q.score_value,
+                question_type: q.question_type || 'standard'
+            };
+        });
 
         res.status(201).json({
             ...result.toJSON(),
+            category: test.category,
             earnedCoins,
-            totalCoins
+            totalCoins,
+            questionsReview
         });
     } catch (error) {
         console.error('Error submitting result:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.submitTrialResult = async (req, res) => {
+    try {
+        const { details } = req.body; // details: { questionId: optionIndex }
+        const test = await Test.findOne({
+            where: { is_trial: true },
+            include: [Question]
+        });
+        if (!test) return res.status(404).json({ message: 'Пробный тест не найден' });
+
+        let score = 0;
+        let max_score = 0;
+        const isBil = test.category === 'bil';
+        const isNis = test.category === 'nis';
+
+        const questionsReview = (test.Questions || []).map((q, idx) => {
+            const rawAns = details ? details[q.id] : undefined;
+            const userAnswer = (rawAns !== undefined && rawAns !== null && rawAns !== '') ? parseInt(rawAns) : null;
+            const isCorrect = userAnswer !== null && userAnswer === q.correct_option_index;
+
+            let max_points = q.score_value || 1;
+            let points_awarded = 0;
+
+            if (isBil) {
+                max_score += 4;
+                max_points = 4;
+                if (userAnswer !== null) {
+                    if (isCorrect) {
+                        score += 4;
+                        points_awarded = 4;
+                    } else {
+                        score -= 1;
+                        points_awarded = -1;
+                    }
+                }
+            } else if (isNis) {
+                const qType = q.question_type || 'standard';
+                const pts = qType === 'sandyk_sippattama' ? 5 : 10;
+                max_score += pts;
+                max_points = pts;
+                if (userAnswer !== null && isCorrect) {
+                    score += pts;
+                    points_awarded = pts;
+                }
+            } else {
+                max_score += q.score_value;
+                max_points = q.score_value;
+                if (isCorrect) {
+                    score += q.score_value;
+                    points_awarded = q.score_value;
+                }
+            }
+
+            return {
+                id: q.id,
+                order: idx + 1,
+                text: q.text,
+                image_url: q.image_url,
+                options: q.options,
+                userAnswer: userAnswer,
+                correct_option_index: q.correct_option_index,
+                isCorrect: isCorrect,
+                max_points,
+                points_awarded,
+                score_value: q.score_value,
+                question_type: q.question_type || 'standard'
+            };
+        });
+
+        res.status(200).json({
+            score,
+            max_score,
+            category: test.category,
+            questionsReview
+        });
+    } catch (error) {
+        console.error('Error in trial result evaluation:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.getResultReview = async (req, res) => {
+    try {
+        const result = await Result.findOne({
+            where: { id: req.params.id, UserId: req.user.id },
+            include: [{
+                model: Test,
+                include: [Question]
+            }]
+        });
+        if (!result) return res.status(404).json({ message: 'Результат не найден' });
+
+        const test = result.Test;
+        const isBil = test ? test.category === 'bil' : false;
+        const isNis = test ? test.category === 'nis' : false;
+        const details = result.details || {};
+        const questionsReview = (test && test.Questions ? test.Questions : []).map((q, idx) => {
+            const rawAns = details[q.id];
+            const userAnswer = (rawAns !== undefined && rawAns !== null && rawAns !== '') ? parseInt(rawAns) : null;
+            const isCorrect = userAnswer !== null && userAnswer === q.correct_option_index;
+
+            let max_points = q.score_value || 1;
+            let points_awarded = 0;
+
+            if (isBil) {
+                max_points = 4;
+                if (userAnswer !== null) {
+                    points_awarded = isCorrect ? 4 : -1;
+                }
+            } else if (isNis) {
+                const qType = q.question_type || 'standard';
+                max_points = qType === 'sandyk_sippattama' ? 5 : 10;
+                if (userAnswer !== null && isCorrect) {
+                    points_awarded = max_points;
+                }
+            } else {
+                if (isCorrect) {
+                    points_awarded = max_points;
+                }
+            }
+
+            return {
+                id: q.id,
+                order: idx + 1,
+                text: q.text,
+                image_url: q.image_url,
+                options: q.options,
+                userAnswer: userAnswer,
+                correct_option_index: q.correct_option_index,
+                isCorrect: isCorrect,
+                max_points,
+                points_awarded,
+                score_value: q.score_value,
+                question_type: q.question_type || 'standard'
+            };
+        });
+
+        res.status(200).json({
+            ...result.toJSON(),
+            category: test ? test.category : 'standard',
+            questionsReview
+        });
+    } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };

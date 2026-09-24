@@ -4,7 +4,6 @@ const verifyToken = (req, res, next) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(403).json({ message: 'No token provided' });
 
-    // Bearer <token>
     const tokenPart = token.split(' ')[1];
     if (!tokenPart) return res.status(403).json({ message: 'Malformed token' });
 
@@ -16,15 +15,40 @@ const verifyToken = (req, res, next) => {
 };
 
 const isAdmin = (req, res, next) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Require Admin Role' });
-    next();
-};
-
-const isTeacherOrAdmin = (req, res, next) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
-        return res.status(403).json({ message: 'Require Teacher or Admin Role' });
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Require Admin Role' });
     }
     next();
 };
 
-module.exports = { verifyToken, isAdmin, isTeacherOrAdmin };
+const isOperatorOrAdmin = (req, res, next) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'operator') {
+        return res.status(403).json({ message: 'Require Operator or Admin Role' });
+    }
+    next();
+};
+
+const isStaff = (req, res, next) => {
+    const staffRoles = ['admin', 'operator', 'curator', 'teacher'];
+    if (!staffRoles.includes(req.user.role)) {
+        return res.status(403).json({ message: 'Require Staff Role' });
+    }
+    next();
+};
+
+// Kept for backward compatibility
+const isTeacherOrAdmin = (req, res, next) => {
+    const allowed = ['admin', 'curator', 'teacher', 'operator'];
+    if (!allowed.includes(req.user.role)) {
+        return res.status(403).json({ message: 'Access Denied' });
+    }
+    next();
+};
+
+module.exports = {
+    verifyToken,
+    isAdmin,
+    isOperatorOrAdmin,
+    isStaff,
+    isTeacherOrAdmin
+};

@@ -15,7 +15,11 @@ exports.createCourse = async (req, res) => {
 exports.getAllCourses = async (req, res) => {
     try {
         const courses = await Course.findAll({
-            include: [{ model: Lesson }]
+            include: [{
+                model: Lesson,
+                include: [{ model: Test, attributes: ['id', 'title'] }]
+            }],
+            order: [[Lesson, 'order', 'ASC']]
         });
 
         if (req.user.role === 'student') {
@@ -58,15 +62,12 @@ exports.getCourseById = async (req, res) => {
             courseJSON.Lessons = courseJSON.Lessons.map(lesson => {
                 // If lesson has a test, check if it's completed
                 const hasTest = lesson.Test && lesson.Test.id;
-                const isTestCompleted = hasTest ? completedTestIds.has(lesson.Test.id) : true;
-                // If no test, maybe solution is free? Or always hidden? 
-                // Let's assume if no test, solution is visible (or maybe there is no solution).
-                // But request says "show solution after he passes the test".
-                // So if there IS a test, we require passing.
+                const isTestCompleted = hasTest ? completedTestIds.has(lesson.Test.id) : false;
 
                 if (hasTest && !isTestCompleted) {
                     lesson.solution_video_urls = []; // Hide solution
                 }
+                lesson.isTestCompleted = isTestCompleted;
                 return lesson;
             });
 

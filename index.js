@@ -32,6 +32,7 @@ const courseRoutes = require('./routes/courses');
 const testRoutes = require('./routes/tests');
 const resultRoutes = require('./routes/results');
 const lessonRoutes = require('./routes/lessons');
+const groupRoutes = require('./routes/groups');
 const { User } = require('./models');
 const bcrypt = require('bcryptjs');
 
@@ -42,10 +43,10 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/results', resultRoutes);
 app.use('/api/lessons', lessonRoutes);
+app.use('/api/groups', groupRoutes);
 app.use('/api/upload', uploadRoutes);
-console.log('Routes mounted: /api/lessons');
+console.log('Routes mounted: /api/lessons, /api/groups');
 
-// Sync Database and Start Server
 // Sync Database and Start Server
 sequelize.sync().then(async () => {
     console.log('Database synced');
@@ -59,6 +60,20 @@ sequelize.sync().then(async () => {
                 console.log('Adding missing coins column to Users table...');
                 await sequelize.query('ALTER TABLE Users ADD COLUMN coins INTEGER DEFAULT 0;');
                 console.log('Coins column added.');
+            }
+
+            const hasGroupId = columns.some(c => c.name === 'groupId');
+            if (!hasGroupId) {
+                console.log('Adding missing groupId column to Users table...');
+                await sequelize.query('ALTER TABLE Users ADD COLUMN groupId INTEGER;');
+                console.log('groupId column added.');
+            }
+
+            const hasPhone = columns.some(c => c.name === 'phone');
+            if (!hasPhone) {
+                console.log('Adding missing phone column to Users table...');
+                await sequelize.query('ALTER TABLE Users ADD COLUMN phone VARCHAR(50);');
+                console.log('phone column added.');
             }
 
             await sequelize.query("DROP TABLE IF EXISTS Users_backup;");

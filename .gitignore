@@ -37,3 +37,4 @@ fix_db_schema.js
 *.njsproj
 *.sln
 *.sw?
+.neon
