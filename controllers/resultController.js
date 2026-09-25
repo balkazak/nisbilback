@@ -233,12 +233,26 @@ exports.submitTrialResult = async (req, res) => {
 
 exports.getResultReview = async (req, res) => {
     try {
+        const staffRoles = ['admin', 'curator', 'teacher', 'operator'];
+        const isStaff = staffRoles.includes(req.user.role);
+
+        const queryWhere = { id: req.params.id };
+        if (!isStaff) {
+            queryWhere.UserId = req.user.id;
+        }
+
         const result = await Result.findOne({
-            where: { id: req.params.id, UserId: req.user.id },
-            include: [{
-                model: Test,
-                include: [Question]
-            }]
+            where: queryWhere,
+            include: [
+                {
+                    model: Test,
+                    include: [Question]
+                },
+                {
+                    model: User,
+                    attributes: ['id', 'username', 'role', 'phone', 'coins']
+                }
+            ]
         });
         if (!result) return res.status(404).json({ message: 'Результат не найден' });
 
@@ -312,6 +326,65 @@ exports.getMyResults = async (req, res) => {
     }
 };
 
+exports.getUserResults = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const targetUser = await User.findByPk(userId, {
+            attributes: ['id', 'username', 'role', 'phone', 'coins', 'groupId']
+        });
+        if (!targetUser) {
+            return res.status(404).json({ message: 'Пользователь не найден' });
+        }
+
+        const results = await Result.findAll({
+            where: { UserId: userId },
+            include: [{ model: Test, attributes: ['id', 'title', 'category'] }],
+            order: [['completed_at', 'DESC']]
+        });
+
+        // Compute summary metrics (total tests, correct answers, total questions, points, etc.)
+        const summary = {
+            totalTests: results.length,
+            totalScore: 0,
+            totalMaxScore: 0,
+            averagePercentage: 0
+        };
+
+        const enrichedResults = results.map(r => {
+            const json = r.toJSON();
+            summary.totalScore += r.score || 0;
+            summary.totalMaxScore += r.max_score || 0;
+
+            let correctCount = 0;
+            let answeredCount = 0;
+            let totalQuestions = 0;
+
+            const details = r.details || {};
+            const qIds = Object.keys(details);
+            answeredCount = qIds.length;
+
+            return {
+                ...json,
+                percentage: r.max_score > 0 ? Math.round((Math.max(0, r.score) / r.max_score) * 100) : 0,
+                answeredCount
+            };
+        });
+
+        if (summary.totalMaxScore > 0) {
+            summary.averagePercentage = Math.round((Math.max(0, summary.totalScore) / summary.totalMaxScore) * 100);
+        }
+
+        res.status(200).json({
+            user: targetUser,
+            summary,
+            results: enrichedResults
+        });
+    } catch (error) {
+        console.error('Error fetching user results:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 exports.getAllResults = async (req, res) => {
     try {
         console.log('Fetching all results');
@@ -328,3 +401,4 @@ exports.getAllResults = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+

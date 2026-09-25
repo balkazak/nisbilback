@@ -4,9 +4,11 @@ const { verifyToken, isTeacherOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+router.get('/trial', controller.submitTrialResult);
 router.post('/trial', controller.submitTrialResult);
 router.post('/', verifyToken, controller.submitResult);
 router.get('/me', verifyToken, controller.getMyResults);
+router.get('/user/:userId', [verifyToken, isTeacherOrAdmin], controller.getUserResults);
 router.get('/:id/review', verifyToken, controller.getResultReview);
 router.get('/', [verifyToken, isTeacherOrAdmin], controller.getAllResults);
 
