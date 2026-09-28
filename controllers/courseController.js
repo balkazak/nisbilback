@@ -19,7 +19,10 @@ exports.getAllCourses = async (req, res) => {
                 model: Lesson,
                 include: [{ model: Test, attributes: ['id', 'title'] }]
             }],
-            order: [[Lesson, 'order', 'ASC']]
+            order: [
+                [Lesson, 'order', 'ASC'],
+                [Lesson, 'id', 'ASC']
+            ]
         });
 
         if (req.user.role === 'student') {
@@ -46,7 +49,10 @@ exports.getCourseById = async (req, res) => {
                 model: Lesson,
                 include: [{ model: Test }] // Include tests attached to lessons
             }],
-            order: [[Lesson, 'order', 'ASC']]
+            order: [
+                [Lesson, 'order', 'ASC'],
+                [Lesson, 'id', 'ASC']
+            ]
         });
         if (!course) return res.status(404).json({ message: 'Course not found' });
 
@@ -103,12 +109,23 @@ exports.updateCourse = async (req, res) => {
 
 // --- Lessons ---
 
-// --- Lessons ---
-
 exports.addLesson = async (req, res) => {
     try {
         const { courseId } = req.params;
-        const { title, video_urls, solution_video_urls, materials, order } = req.body;
+        let { title, video_urls, solution_video_urls, materials, order } = req.body;
+
+        if (order === undefined || order === null) {
+            const match = title ? title.trim().match(/^(\d+)[\.\s]/) : null;
+            if (match) {
+                order = parseInt(match[1], 10);
+            } else {
+                const maxLesson = await Lesson.findOne({
+                    where: { CourseId: courseId },
+                    order: [['order', 'DESC']]
+                });
+                order = maxLesson ? (maxLesson.order + 1) : 1;
+            }
+        }
 
         const lesson = await Lesson.create({
             title,
@@ -136,13 +153,50 @@ exports.deleteLesson = async (req, res) => {
 
 exports.updateLesson = async (req, res) => {
     try {
-        const { title, video_urls, solution_video_urls, materials, order } = req.body;
+        let { title, video_urls, solution_video_urls, materials, order } = req.body;
+        if ((order === undefined || order === null) && title) {
+            const match = title.trim().match(/^(\d+)[\.\s]/);
+            if (match) {
+                order = parseInt(match[1], 10);
+            }
+        }
+        const updateData = { title, video_urls, solution_video_urls, materials };
+        if (order !== undefined && order !== null) {
+            updateData.order = order;
+        }
+
         const [updated] = await Lesson.update(
-            { title, video_urls, solution_video_urls, materials, order },
+            updateData,
             { where: { id: req.params.id } }
         );
         if (!updated) return res.status(404).json({ message: 'Lesson not found' });
         res.status(200).json({ message: 'Lesson updated' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.sortCourseLessons = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const lessons = await Lesson.findAll({ where: { CourseId: courseId } });
+        for (const lesson of lessons) {
+            const match = lesson.title.trim().match(/^(\d+)[\.\s]/);
+            if (match) {
+                const targetOrder = parseInt(match[1], 10);
+                if (lesson.order !== targetOrder) {
+                    await Lesson.update({ order: targetOrder }, { where: { id: lesson.id } });
+                }
+            }
+        }
+        const updatedCourse = await Course.findByPk(courseId, {
+            include: [{ model: Lesson, include: [{ model: Test }] }],
+            order: [
+                [Lesson, 'order', 'ASC'],
+                [Lesson, 'id', 'ASC']
+            ]
+        });
+        res.status(200).json(updatedCourse);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

@@ -15,5 +15,6 @@ router.delete('/:id', [verifyToken, isAdmin], controller.deleteCourse);
 
 // Lessons
 router.post('/:courseId/lessons', [verifyToken, isAdmin], controller.addLesson);
+router.post('/:courseId/sort-lessons', [verifyToken, isAdmin], controller.sortCourseLessons);
 
 module.exports = router;
