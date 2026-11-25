@@ -53,13 +53,35 @@ const Test = sequelize.define('Test', {
     coin_price: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
+const QuestionCategory = sequelize.define('QuestionCategory', {
+    name_kk: { type: DataTypes.STRING, allowNull: false },
+    name_ru: { type: DataTypes.STRING, allowNull: false },
+    sort_order: { type: DataTypes.INTEGER, defaultValue: 0 }
+});
+
+const QuestionSubcategory = sequelize.define('QuestionSubcategory', {
+    name_kk: { type: DataTypes.STRING, allowNull: false },
+    name_ru: { type: DataTypes.STRING, allowNull: false },
+    sort_order: { type: DataTypes.INTEGER, defaultValue: 0 },
+    categoryId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'QuestionCategories', key: 'id' }
+    }
+});
+
 const Question = sequelize.define('Question', {
     text: { type: DataTypes.TEXT, allowNull: false },
     image_url: { type: DataTypes.STRING }, // Optional image for the question
     options: { type: DataTypes.JSON, allowNull: false }, // Array of { text, image_url }
     correct_option_index: { type: DataTypes.INTEGER, allowNull: false },
     score_value: { type: DataTypes.INTEGER, defaultValue: 1 },
-    question_type: { type: DataTypes.ENUM('standard', 'sandyk_sippattama'), defaultValue: 'standard' }
+    question_type: { type: DataTypes.ENUM('standard', 'sandyk_sippattama'), defaultValue: 'standard' },
+    subcategoryId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'QuestionSubcategories', key: 'id' }
+    }
 });
 
 const Result = sequelize.define('Result', {
@@ -133,6 +155,13 @@ Test.belongsTo(Lesson, { foreignKey: 'lessonId' });
 Test.hasMany(Question, { onDelete: 'CASCADE' });
 Question.belongsTo(Test);
 
+// Question Categories & Subcategories (used ONLY for standalone tests)
+QuestionCategory.hasMany(QuestionSubcategory, { as: 'subcategories', foreignKey: 'categoryId', onDelete: 'CASCADE' });
+QuestionSubcategory.belongsTo(QuestionCategory, { as: 'category', foreignKey: 'categoryId' });
+
+QuestionSubcategory.hasMany(Question, { foreignKey: 'subcategoryId', onDelete: 'SET NULL' });
+Question.belongsTo(QuestionSubcategory, { as: 'subcategory', foreignKey: 'subcategoryId' });
+
 // User Access (Courses)
 User.belongsToMany(Course, { through: UserCourses });
 Course.belongsToMany(User, { through: UserCourses });
@@ -162,6 +191,8 @@ module.exports = {
     Lesson,
     Test,
     Question,
+    QuestionCategory,
+    QuestionSubcategory,
     Result,
     UserCourses,
     UserTests,

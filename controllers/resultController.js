@@ -1,4 +1,98 @@
-const { Result, Test, User, Question } = require('../models');
+const { Result, Test, User, Question, QuestionCategory, QuestionSubcategory } = require('../models');
+
+const questionWithCategoryInclude = {
+    model: Question,
+    include: [
+        {
+            model: QuestionSubcategory,
+            as: 'subcategory',
+            include: [{ model: QuestionCategory, as: 'category' }]
+        }
+    ]
+};
+
+const formatSubcategoryPayload = (q) => {
+    if (!q.subcategory) return null;
+    return {
+        id: q.subcategory.id,
+        name_kk: q.subcategory.name_kk,
+        name_ru: q.subcategory.name_ru,
+        categoryId: q.subcategory.categoryId,
+        category: q.subcategory.category
+            ? {
+                id: q.subcategory.category.id,
+                name_kk: q.subcategory.category.name_kk,
+                name_ru: q.subcategory.category.name_ru
+            }
+            : null
+    };
+};
+
+const buildTopicAnalysis = (questionsReview) => {
+    const categoryMap = new Map();
+
+    for (const q of questionsReview) {
+        if (!q.subcategory || !q.subcategory.category) continue;
+        const cat = q.subcategory.category;
+        const sub = q.subcategory;
+
+        if (!categoryMap.has(cat.id)) {
+            categoryMap.set(cat.id, {
+                categoryId: cat.id,
+                name_kk: cat.name_kk,
+                name_ru: cat.name_ru,
+                totalQuestions: 0,
+                correctCount: 0,
+                wrongCount: 0,
+                subcategoriesMap: new Map()
+            });
+        }
+
+        const catEntry = categoryMap.get(cat.id);
+        catEntry.totalQuestions += 1;
+        if (q.isCorrect) catEntry.correctCount += 1;
+        else catEntry.wrongCount += 1;
+
+        if (!catEntry.subcategoriesMap.has(sub.id)) {
+            catEntry.subcategoriesMap.set(sub.id, {
+                subcategoryId: sub.id,
+                name_kk: sub.name_kk,
+                name_ru: sub.name_ru,
+                total: 0,
+                correct: 0,
+                wrong: 0,
+                percentage: 0,
+                questionIds: []
+            });
+        }
+
+        const subEntry = catEntry.subcategoriesMap.get(sub.id);
+        subEntry.total += 1;
+        if (q.isCorrect) subEntry.correct += 1;
+        else subEntry.wrong += 1;
+        subEntry.questionIds.push(q.id);
+    }
+
+    return Array.from(categoryMap.values()).map((catEntry) => {
+        const subcategories = Array.from(catEntry.subcategoriesMap.values())
+            .map((sub) => ({
+                ...sub,
+                percentage: sub.total > 0 ? Math.round((sub.correct / sub.total) * 100) : 0
+            }))
+            .sort((a, b) => b.percentage - a.percentage || b.total - a.total);
+
+        return {
+            categoryId: catEntry.categoryId,
+            name_kk: catEntry.name_kk,
+            name_ru: catEntry.name_ru,
+            totalQuestions: catEntry.totalQuestions,
+            correctCount: catEntry.correctCount,
+            wrongCount: catEntry.wrongCount,
+            percentage: catEntry.totalQuestions > 0 ? Math.round((catEntry.correctCount / catEntry.totalQuestions) * 100) : 0,
+            subcategories
+        };
+    });
+};
 
 exports.submitResult = async (req, res) => {
     try {
@@ -8,7 +102,8 @@ exports.submitResult = async (req, res) => {
         console.log('User ID:', req.user.id);
 
         const test = await Test.findByPk(testId, {
-            include: [Question]
+            include: [questionWithCategoryInclude],
+            order: [[Question, 'id', 'ASC']]
         });
 
         if (!test) {
@@ -134,16 +229,22 @@ exports.submitResult = async (req, res) => {
                 max_points,
                 points_awarded,
                 score_value: q.score_value,
-                question_type: q.question_type || 'standard'
+                question_type: q.question_type || 'standard',
+                subcategoryId: q.subcategoryId || null,
+                subcategory: formatSubcategoryPayload(q)
             };
         });
+
+        const topicAnalysis = test.is_standalone ? buildTopicAnalysis(questionsReview) : [];
 
         res.status(201).json({
             ...result.toJSON(),
             category: test.category,
+            is_standalone: test.is_standalone,
             earnedCoins,
             totalCoins,
-            questionsReview
+            questionsReview,
+            topicAnalysis
         });
     } catch (error) {
         console.error('Error submitting result:', error);
@@ -246,13 +347,14 @@ exports.getResultReview = async (req, res) => {
             include: [
                 {
                     model: Test,
-                    include: [Question]
+                    include: [questionWithCategoryInclude]
                 },
                 {
                     model: User,
                     attributes: ['id', 'username', 'role', 'phone', 'coins']
                 }
-            ]
+            ],
+            order: [[Test, Question, 'id', 'ASC']]
         });
         if (!result) return res.status(404).json({ message: 'Результат не найден' });
 
@@ -297,14 +399,20 @@ exports.getResultReview = async (req, res) => {
                 max_points,
                 points_awarded,
                 score_value: q.score_value,
-                question_type: q.question_type || 'standard'
+                question_type: q.question_type || 'standard',
+                subcategoryId: q.subcategoryId || null,
+                subcategory: formatSubcategoryPayload(q)
             };
         });
+
+        const topicAnalysis = (test && test.is_standalone) ? buildTopicAnalysis(questionsReview) : [];
 
         res.status(200).json({
             ...result.toJSON(),
             category: test ? test.category : 'standard',
-            questionsReview
+            is_standalone: test ? test.is_standalone : false,
+            questionsReview,
+            topicAnalysis
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -314,12 +422,54 @@ exports.getResultReview = async (req, res) => {
 exports.getMyResults = async (req, res) => {
     try {
         console.log('Fetching results for user:', req.user.id);
+        const testInclude = {
+            model: Test,
+            attributes: ['id', 'title', 'category', 'is_standalone', 'is_trial', 'lessonId'],
+            include: [{ model: Question, attributes: ['id', 'correct_option_index'] }]
+        };
+        if (req.query.standalone === 'true') {
+            testInclude.where = { is_standalone: true };
+            testInclude.required = true;
+        }
+
         const results = await Result.findAll({
             where: { UserId: req.user.id },
-            include: [{ model: Test, attributes: ['title', 'category'] }]
+            include: [testInclude],
+            order: [['completed_at', 'DESC'], ['createdAt', 'DESC']]
         });
-        console.log(`Found ${results.length} results`);
-        res.status(200).json(results);
+
+        const enriched = results.map(r => {
+            const json = r.toJSON();
+            const questions = json.Test?.Questions || [];
+            const details = json.details || {};
+            let correctCount = 0;
+            questions.forEach(q => {
+                const rawAns = details[q.id];
+                if (rawAns !== undefined && rawAns !== null && rawAns !== '' && parseInt(rawAns) === q.correct_option_index) {
+                    correctCount++;
+                }
+            });
+            const totalQuestions = questions.length;
+            const wrongCount = Math.max(0, totalQuestions - correctCount);
+            const percentage = totalQuestions > 0
+                ? Math.round((correctCount / totalQuestions) * 100)
+                : (json.max_score > 0 ? Math.round((Math.max(0, json.score) / json.max_score) * 100) : 0);
+
+            if (json.Test) {
+                delete json.Test.Questions;
+            }
+
+            return {
+                ...json,
+                totalQuestions,
+                correctCount,
+                wrongCount,
+                percentage
+            };
+        });
+
+        console.log(`Found ${enriched.length} results`);
+        res.status(200).json(enriched);
     } catch (error) {
         console.error('Error fetching my results:', error);
         res.status(500).json({ message: error.message });

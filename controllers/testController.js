@@ -1,9 +1,37 @@
-const { Test, Question, Lesson, User, Course } = require('../models');
+const { Test, Question, QuestionCategory, QuestionSubcategory, Lesson, User, Course } = require('../models');
+
+const questionWithCategoryInclude = {
+    model: Question,
+    include: [
+        {
+            model: QuestionSubcategory,
+            as: 'subcategory',
+            include: [{ model: QuestionCategory, as: 'category' }]
+        }
+    ]
+};
+
+const validateStandaloneQuestionCategories = (is_standalone, lessonId, questions) => {
+    if (!is_standalone || lessonId) return null;
+    if (!Array.isArray(questions) || questions.length === 0) return null;
+    for (let i = 0; i < questions.length; i++) {
+        const subId = questions[i].subcategoryId;
+        if (!subId || Number.isNaN(parseInt(subId, 10))) {
+            return `Для вопроса №${i + 1} необходимо выбрать категорию и подкатегорию`;
+        }
+    }
+    return null;
+};
 
 exports.createTest = async (req, res) => {
     try {
         // lessonId is optional. If present, attaches to lesson. If null, standalone.
         const { title, description, time_limit, is_standalone, lessonId, questions, category, is_trial, coin_price } = req.body;
+
+        const validationError = validateStandaloneQuestionCategories(is_standalone, lessonId, questions);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
 
         if (is_trial) {
             await Test.update({ is_trial: false }, { where: { is_trial: true } });
@@ -21,7 +49,11 @@ exports.createTest = async (req, res) => {
         });
 
         if (questions && questions.length > 0) {
-            const questionData = questions.map(q => ({ ...q, TestId: test.id }));
+            const questionData = questions.map(q => ({
+                ...q,
+                subcategoryId: (is_standalone && !lessonId && q.subcategoryId) ? parseInt(q.subcategoryId, 10) : null,
+                TestId: test.id
+            }));
             await Question.bulkCreate(questionData);
         }
 
@@ -34,18 +66,19 @@ exports.createTest = async (req, res) => {
 exports.getTestById = async (req, res) => {
     try {
         const test = await Test.findByPk(req.params.id, {
-            include: [Question]
+            include: [questionWithCategoryInclude],
+            order: [[Question, 'id', 'ASC']]
         });
         if (!test) return res.status(404).json({ message: 'Тест не найден' });
 
-        // If student, maybe hide correct answers? 
-        // For simplicity, we send them now but frontend should handle logic or we sanitize here.
-        // Let's keep it simple: Controller sends data, trusting client for now unless we need strict security.
-        // Ideally, we shouldn't send 'correct_option_index' to students before submission.
-
+        // Hide correct answers and question categories from students while taking the test
         if (req.user.role === 'student' && !req.query.showAnswers) {
             const plainTest = test.toJSON();
-            plainTest.Questions.forEach(q => delete q.correct_option_index);
+            plainTest.Questions.forEach(q => {
+                delete q.correct_option_index;
+                delete q.subcategoryId;
+                delete q.subcategory;
+            });
             return res.status(200).json(plainTest);
         }
 
@@ -112,12 +145,20 @@ exports.updateTest = async (req, res) => {
     try {
         const { title, description, time_limit, is_standalone, lessonId, questions, category, is_trial, coin_price } = req.body;
 
+        const test = await Test.findByPk(req.params.id);
+        if (!test) return res.status(404).json({ message: 'Тест не найден' });
+
+        const effectiveStandalone = is_standalone !== undefined ? is_standalone : test.is_standalone;
+        const effectiveLessonId = lessonId !== undefined ? lessonId : test.lessonId;
+
+        const validationError = validateStandaloneQuestionCategories(effectiveStandalone, effectiveLessonId, questions);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+
         if (is_trial) {
             await Test.update({ is_trial: false }, { where: { is_trial: true } });
         }
-
-        const test = await Test.findByPk(req.params.id);
-        if (!test) return res.status(404).json({ message: 'Тест не найден' });
 
         // Update test metadata
         await test.update({
@@ -134,11 +175,18 @@ exports.updateTest = async (req, res) => {
         // Update questions: delete old ones and create new ones
         if (questions && questions.length > 0) {
             await Question.destroy({ where: { TestId: test.id } });
-            const questionData = questions.map(q => ({ ...q, TestId: test.id }));
+            const questionData = questions.map(q => ({
+                ...q,
+                subcategoryId: (effectiveStandalone && !effectiveLessonId && q.subcategoryId) ? parseInt(q.subcategoryId, 10) : null,
+                TestId: test.id
+            }));
             await Question.bulkCreate(questionData);
         }
 
-        const updatedTest = await Test.findByPk(test.id, { include: [Question] });
+        const updatedTest = await Test.findByPk(test.id, {
+            include: [questionWithCategoryInclude],
+            order: [[Question, 'id', 'ASC']]
+        });
         res.status(200).json(updatedTest);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -149,14 +197,19 @@ exports.getTrialTest = async (req, res) => {
     try {
         const test = await Test.findOne({
             where: { is_trial: true },
-            include: [Question]
+            include: [Question],
+            order: [[Question, 'id', 'ASC']]
         });
         if (!test) return res.status(404).json({ message: 'Тест не найден' });
 
-        // Sanitize for guest/student: remove correct_option_index
+        // Sanitize for guest/student: remove correct_option_index and categories
         const plainTest = test.toJSON();
         if (plainTest.Questions) {
-            plainTest.Questions.forEach(q => delete q.correct_option_index);
+            plainTest.Questions.forEach(q => {
+                delete q.correct_option_index;
+                delete q.subcategoryId;
+                delete q.subcategory;
+            });
         }
 
         res.status(200).json(plainTest);

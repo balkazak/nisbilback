@@ -33,7 +33,9 @@ const testRoutes = require('./routes/tests');
 const resultRoutes = require('./routes/results');
 const lessonRoutes = require('./routes/lessons');
 const groupRoutes = require('./routes/groups');
-const { User } = require('./models');
+const questionCategoryRoutes = require('./routes/questionCategories');
+const { User, QuestionCategory, QuestionSubcategory } = require('./models');
+const questionCategoriesSeed = require('./data/questionCategoriesSeed');
 const bcrypt = require('bcryptjs');
 
 // Routes
@@ -44,8 +46,9 @@ app.use('/api/tests', testRoutes);
 app.use('/api/results', resultRoutes);
 app.use('/api/lessons', lessonRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/question-categories', questionCategoryRoutes);
 app.use('/api/upload', uploadRoutes);
-console.log('Routes mounted: /api/lessons, /api/groups');
+console.log('Routes mounted: /api/lessons, /api/groups, /api/question-categories');
 
 // Sync Database and Start Server
 sequelize.sync().then(async () => {
@@ -85,9 +88,52 @@ sequelize.sync().then(async () => {
                 await sequelize.query('ALTER TABLE Lessons ADD COLUMN materials JSON DEFAULT "[]";');
                 console.log('Materials column added.');
             }
+
+            const questionColumns = await sequelize.query("PRAGMA table_info(Questions);", { type: sequelize.QueryTypes.SELECT });
+            const hasSubcategoryId = questionColumns.some(c => c.name === 'subcategoryId');
+            if (!hasSubcategoryId) {
+                console.log('Adding missing subcategoryId column to Questions table...');
+                await sequelize.query('ALTER TABLE Questions ADD COLUMN subcategoryId INTEGER REFERENCES QuestionSubcategories(id) ON DELETE SET NULL;');
+                console.log('subcategoryId column added.');
+            }
         } catch (err) {
-            console.error('Migration error (Users/Lessons):', err.message);
+            console.error('Migration error (Users/Lessons/Questions):', err.message);
         }
+    } else if (sequelize.getDialect() === 'postgres') {
+        try {
+            await sequelize.query(`
+                ALTER TABLE "Questions"
+                ADD COLUMN IF NOT EXISTS "subcategoryId" INTEGER
+                REFERENCES "QuestionSubcategories"("id") ON DELETE SET NULL;
+            `);
+        } catch (err) {
+            console.error('Migration error (Postgres Questions.subcategoryId):', err.message);
+        }
+    }
+
+    // Seed Question Categories if empty
+    try {
+        const catCount = await QuestionCategory.count();
+        if (catCount === 0) {
+            console.log('Seeding bilingual QuestionCategories and QuestionSubcategories...');
+            for (const catItem of questionCategoriesSeed) {
+                const category = await QuestionCategory.create({
+                    name_kk: catItem.name_kk,
+                    name_ru: catItem.name_ru,
+                    sort_order: catItem.sort_order
+                });
+                const subs = catItem.subcategories.map((sub, idx) => ({
+                    categoryId: category.id,
+                    name_kk: sub.name_kk,
+                    name_ru: sub.name_ru,
+                    sort_order: idx + 1
+                }));
+                await QuestionSubcategory.bulkCreate(subs);
+            }
+            console.log('QuestionCategories seed complete.');
+        }
+    } catch (seedErr) {
+        console.error('QuestionCategories seed error:', seedErr.message);
     }
 
     // Seed Admin
